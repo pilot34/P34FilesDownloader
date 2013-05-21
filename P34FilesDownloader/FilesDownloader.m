@@ -27,6 +27,7 @@ static FilesDownloader *__shared;
 @property(atomic) unsigned long long downlodedSizeFromCurrentPortion;
 @property(atomic) unsigned long long cutDownloadedSize;
 @property(atomic) BOOL wasError;
+@property(atomic) BOOL wasCancelled;
 
 @end
 
@@ -145,7 +146,7 @@ static FilesDownloader *__shared;
     // отключаем таймер, чтобы не засыпало, пока качаем
     UIApplication.sharedApplication.idleTimerDisabled = YES;
     
-    @synchronized(self.queue)
+    @synchronized(self.class)
     {
         if (!self.currentPortion)
         {
@@ -183,7 +184,7 @@ static FilesDownloader *__shared;
 {
     [NSNotificationCenter.defaultCenter postNotificationName:FILES_DOWNLOADER_DID_FAIL_NOTIFICATION
                                                       object:nil
-                                                    userInfo:@{ FILES_DOWNLOADER_PORTION_KEY : self.currentPortion }];
+                                                    userInfo:@{ FILES_DOWNLOADER_PORTION_KEY : self.currentPortion, FILES_DOWNLOADER_CANCELLED_KEY : @(self.wasCancelled) }];
 }
 
 - (void)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder
@@ -261,12 +262,12 @@ static FilesDownloader *__shared;
         if ([self.currentPortion.title isEqualToString:portion])
         {
             // чтобы уведомление не отправилось - обнуляем
-            self.currentPortion = nil;
             [self.queue reset];
             
             // откладываем, иначе реквесты cancell-ется
             doAfter(1, ^{
-                [self didDownloadPortion:nil];
+                self.wasCancelled = YES;
+                [self didDownloadPortion:self.queue];
             });
         }
         else
@@ -307,7 +308,7 @@ static FilesDownloader *__shared;
     if (self.portionsQueue.count == 0)
         UIApplication.sharedApplication.idleTimerDisabled = NO;
     
-    if (self.wasError)
+    if (self.wasError || self.wasCancelled)
     {        
         dispatch_async(dispatch_get_main_queue(), ^{
             [self notifyObserversWithError];
@@ -315,6 +316,7 @@ static FilesDownloader *__shared;
                 [self.queue reset];
                 self.currentPortion = nil;
                 self.wasError = NO;
+                self.wasCancelled = NO;
             });
         });
         return;
