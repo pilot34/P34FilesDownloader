@@ -12,30 +12,32 @@
 @interface DownloadPortion()
 
 
-@property(strong, nonatomic) NSString *title;
-@property(strong, nonatomic) NSArray *files;
+@property (strong, nonatomic) NSString *title;
+@property (strong, nonatomic) NSArray *files;
+@property (strong, nonatomic) NSString *destinationFolder;
 
 @end
 
 @implementation DownloadPortion : NSObject
 
-- (id)initWithSingleUrl:(NSString *)url title:(NSString *)title
+- (id)initWithSingleUrl:(NSString *)url title:(NSString *)title folder:(NSString *)destinationFolder
 {
-    return [self initWithTitle:title files:@[url]];
+    return [self initWithTitle:title files:@[url] folder:destinationFolder];
 }
 
-- (id)initWithSingleUrl:(NSString *)url
+- (id)initWithSingleUrl:(NSString *)url folder:(NSString *)destinationFolder
 {
-    return [self initWithSingleUrl:url title:url];
+    return [self initWithSingleUrl:url title:url folder:destinationFolder];
 }
 
-- (id)initWithTitle:(NSString *)title files:(NSArray *)files
+- (id)initWithTitle:(NSString *)title files:(NSArray *)files folder:(NSString *)destinationFolder
 {
     self = [super init];
     if (self)
     {
         self.title = title;
         self.files = files;
+        self.destinationFolder = destinationFolder;
     }
     return self;
 }

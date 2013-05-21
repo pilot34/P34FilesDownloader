@@ -18,7 +18,6 @@ static FilesDownloader *__shared;
 
 @interface FilesDownloader()
 
-@property(strong, atomic) NSSet *observers;
 @property(strong, atomic) NSArray *portionsQueue;
 @property(strong, atomic) ASINetworkQueue *queue;
 @property(strong, atomic) DownloadPortion *currentPortion;
@@ -33,21 +32,13 @@ static FilesDownloader *__shared;
 
 @implementation FilesDownloader
 
-+ (id)shared
++ (FilesDownloader *)shared
 {
-    if (!__shared)
-    {
-        @synchronized(self)
-        {
-            if (!__shared)
-            {
-                __shared = [[self alloc] init];
-                
-                // чтобы через edge много не скачало
-                [ASIHTTPRequest throttleBandwidthForWWANUsingLimit:BANDWIDTH_WWAN_LIMIT];
-            }
-        }
-    }
+    static FilesDownloader *__shared;
+    static dispatch_once_t oncePredicate;
+    dispatch_once(&oncePredicate, ^{
+        __shared = [[FilesDownloader alloc] init];
+    });
     
     return __shared;
 }
@@ -82,59 +73,14 @@ static FilesDownloader *__shared;
     return YES;
 }
 
-- (NSString *)storeDataFolder
-{
-    NSString *result = nil;
-    NSString *docs = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, 
-                                                          NSUserDomainMask, 
-                                                          YES) lastObject];
-    if (docs)
-    {
-        result = [docs stringByAppendingPathComponent:@"data"];
-        if (![self createFolder:result])
-            return nil;
-    }
-    
-    return result;
-}
-
-- (NSString *)pathForUrl:(NSString *)url inPortion:(NSString *)portionTitle
-{
-    NSString *folder = [self storeDataFolder];
-    NSString *extension = [url pathExtension];
-    NSString *file = [url md5Hash];
-    NSString *result = [[folder stringByAppendingPathComponent:file] stringByAppendingPathExtension:extension];
-    return result;
-}
-
-- (void)addObserver:(id<FilesDownloaderDelegate>)observer
-{
-    NSMutableSet *newObs = self.observers ? self.observers.mutableCopy : [NSMutableSet set];
-    
-    if (![newObs containsObject:observer])
-        [newObs addObject:observer];
-    
-    self.observers = newObs;
-}
-
-- (void)removeObserver:(__unsafe_unretained id)observer
-{
-    NSMutableSet *newObs = self.observers ? self.observers.mutableCopy : [NSMutableSet set];
-    
-    if ([newObs containsObject:observer])
-        [newObs removeObject:observer];
-    
-    self.observers = newObs;    
-}
-
 - (NSArray *)requestsForPortion:(DownloadPortion *)portion
 {
     NSMutableArray *result = [NSMutableArray array];
     self.downlodedSizeFromCurrentPortion = 0;
     
-    for (NSString *url in portion.files) 
+    for (NSString *url in portion.files)
     {
-        NSString *path = [self pathForUrl:url inPortion:portion.title];
+        NSString *path = [portion.destinationFolder stringByAppendingPathComponent:[url lastPathComponent]];
         NSString *partPath = [path stringByAppendingPathExtension:@"part"];
 
         // если уже скачали - добавлять не надо, но сохраним размер для правильного прогресса
@@ -161,37 +107,34 @@ static FilesDownloader *__shared;
 
 - (void)performEnqueue
 {
-    @autoreleasepool 
+    [self.queue reset];
+    self.queue.downloadProgressDelegate = self;
+    self.queue.queueDidFinishSelector = @selector(didDownloadPortion:);
+    self.queue.requestDidStartSelector = @selector(didStartRequest:);
+    self.queue.requestDidFailSelector = @selector(didFailRequest:);
+    self.queue.requestDidFinishSelector = @selector(didFinishRequest:);
+    self.queue.showAccurateProgress = YES;
+    self.queue.shouldCancelAllRequestsOnFailure = YES;
+    self.queue.delegate = self;
+    NSArray *requests = [self requestsForPortion:self.currentPortion];
+    
+    if (requests.count == 0)
     {
-        [self.queue reset];
-        self.queue.downloadProgressDelegate = self;
-        self.queue.queueDidFinishSelector = @selector(didDownloadPortion:);
-        self.queue.requestDidStartSelector = @selector(didStartRequest:);
-        self.queue.requestDidFailSelector = @selector(didFailRequest:);
-        self.queue.requestDidFinishSelector = @selector(didFinishRequest:);
-        self.queue.showAccurateProgress = YES;
-        self.queue.shouldCancelAllRequestsOnFailure = YES;
-        self.queue.delegate = self;
-        NSArray *requests = [self requestsForPortion:self.currentPortion];
-        
-        if (requests.count == 0)
-        {
-            [self performSelectorOnMainThread:@selector(didDownloadPortion:)
-                                   withObject:self.queue
-                                waitUntilDone:NO];
-            return;
-        }
-        
-        for (ASIHTTPRequest *r in requests)
-        {
-            [self.queue addOperation:r];
-        }
-        
-        self.startDownloadingPortionDate = NSDate.date;
-        self.cutDownloadedSize = 0;
-        
-        [self.queue go];    
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self didDownloadPortion:self.queue];
+        });
+        return;
     }
+    
+    for (ASIHTTPRequest *r in requests)
+    {
+        [self.queue addOperation:r];
+    }
+    
+    self.startDownloadingPortionDate = NSDate.date;
+    self.cutDownloadedSize = 0;
+    
+    [self.queue go];    
 }
 
 
@@ -209,7 +152,9 @@ static FilesDownloader *__shared;
             log(@"currentPortion = %@", portion.title);
             // если ничего не скачиваем - сразу запускаем очередь
             self.currentPortion = portion;
-            [self performSelectorInBackground:@selector(performEnqueue) withObject:nil];
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                [self performEnqueue];
+            });
         }
         else 
         {
@@ -222,38 +167,29 @@ static FilesDownloader *__shared;
 
 - (void)notifyObserversWithProgress:(DownloadProgress *)progress
 {
-    for (id observer in self.observers) 
-    {
-        if ([observer respondsToSelector:@selector(filesDownloaderDidChangeProgress:forPortion:)])
-        {
-            [observer filesDownloaderDidChangeProgress:progress
-                                            forPortion:self.currentPortion];
-        }
-    }
+    [NSNotificationCenter.defaultCenter postNotificationName:FILES_DOWNLOADER_DID_CHANGE_PROGRESS_NOTIFICATION
+                                                      object:nil
+                                                    userInfo:@{ FILES_DOWNLOADER_PORTION_KEY : self.currentPortion, FILES_DOWNLOADER_PROGRESS_KEY : progress}];
 }
 
 - (void)notifyObserversWithFinish
 {
-    for (id observer in self.observers) 
-    {
-        if ([observer respondsToSelector:@selector(filesDownloaderDidDownloadPortion:)])
-            [observer filesDownloaderDidDownloadPortion:self.currentPortion];
-    }
+    [NSNotificationCenter.defaultCenter postNotificationName:FILES_DOWNLOADER_DID_DOWNLOAD_NOTIFICATION
+                                                      object:nil
+                                                    userInfo:@{ FILES_DOWNLOADER_PORTION_KEY : self.currentPortion }];
 }
 
 - (void)notifyObserversWithError
 {
-    for (id observer in self.observers) 
-    {
-        if ([observer respondsToSelector:@selector(filesDownloaderDidFailForPortion:)])
-            [observer filesDownloaderDidFailForPortion:self.currentPortion];
-    }
+    [NSNotificationCenter.defaultCenter postNotificationName:FILES_DOWNLOADER_DID_FAIL_NOTIFICATION
+                                                      object:nil
+                                                    userInfo:@{ FILES_DOWNLOADER_PORTION_KEY : self.currentPortion }];
 }
 
-- (void)downloadFileSynchronous:(NSString *)url
+- (void)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder
 {
     ASIHTTPRequest *r = [ASIHTTPRequest requestWithURL:[NSURL URLWithString:url]];
-    r.downloadDestinationPath = [self pathForUrl:url inPortion:nil];
+    r.downloadDestinationPath = [folder stringByAppendingPathComponent:[url lastPathComponent]];
     [r startSynchronous];
 }
 
@@ -291,9 +227,9 @@ static FilesDownloader *__shared;
         self.currentPortion = nil;
         [self.queue reset];
         // немного отложим, чтоб успели очиститься старые реквесты
-        [self performSelector:@selector(enqueuePortion:) 
-                   withObject:c
-                   afterDelay:2];
+        doAfter(2, ^{
+            [self enqueuePortion:c];
+        });
     }
 }
 
@@ -329,7 +265,9 @@ static FilesDownloader *__shared;
             [self.queue reset];
             
             // откладываем, иначе реквесты cancell-ется
-            [self performSelector:@selector(didDownloadPortion:) withObject:nil afterDelay:1];
+            doAfter(1, ^{
+                [self didDownloadPortion:nil];
+            });
         }
         else
         {
@@ -358,9 +296,9 @@ static FilesDownloader *__shared;
     p.progress = ((CGFloat)p.downloadedBytes) / p.totalBytes;
     p.remainingTime = self.remainingTimeInterval;
     
-    [self performSelectorOnMainThread:@selector(notifyObserversWithProgress:) 
-                           withObject:p
-                        waitUntilDone:NO];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self notifyObserversWithProgress:p];
+    });
 }
 
 - (void)didDownloadPortion:(ASINetworkQueue *)queue
@@ -370,35 +308,34 @@ static FilesDownloader *__shared;
         UIApplication.sharedApplication.idleTimerDisabled = NO;
     
     if (self.wasError)
-    {
-        [self performSelectorOnMainThread:@selector(notifyObserversWithError)
-                               withObject:nil 
-                            waitUntilDone:YES];
-        
-        [self.queue reset];
-        self.currentPortion = nil;
-        self.wasError = NO;
+    {        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self notifyObserversWithError];
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                [self.queue reset];
+                self.currentPortion = nil;
+                self.wasError = NO;
+            });
+        });
         return;
     }
     
     log(@"didDownloadPortion %@", self.currentPortion.title);
     
-    [self performSelectorOnMainThread:@selector(notifyObserversWithFinish)
-                           withObject:nil 
-                        waitUntilDone:YES];
-    
-    [self.queue reset];
-    self.currentPortion = nil;
-    
-    @synchronized(self.class)
-    {
-        if (self.portionsQueue.count > 0)
-        {
-            DownloadPortion *first = self.portionsQueue.firstObject;
-            self.portionsQueue = [self.portionsQueue subarrayWithRange:NSMakeRange(1, self.portionsQueue.count - 1)];
-            [self enqueuePortion:first];
-        }
-    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self notifyObserversWithFinish];
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            [self.queue reset];
+            self.currentPortion = nil;
+            
+            if (self.portionsQueue.count > 0)
+            {
+                DownloadPortion *first = self.portionsQueue.firstObject;
+                self.portionsQueue = [self.portionsQueue subarrayWithRange:NSMakeRange(1, self.portionsQueue.count - 1)];
+                [self enqueuePortion:first];
+            }
+        });
+    });
 }
 
 - (void)didStartRequest:(ASIHTTPRequest *)request

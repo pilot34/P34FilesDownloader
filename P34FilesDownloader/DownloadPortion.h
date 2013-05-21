@@ -11,11 +11,12 @@
 
 @interface DownloadPortion : NSObject
 
-@property(strong, nonatomic, readonly) NSString *title;
-@property(strong, nonatomic, readonly) NSArray *files;
+@property (strong, nonatomic, readonly) NSString *title;
+@property (strong, nonatomic, readonly) NSArray *files;
+@property (strong, nonatomic, readonly) NSString *destinationFolder;
 
-- (id)initWithSingleUrl:(NSString *)url;
-- (id)initWithSingleUrl:(NSString *)url title:(NSString *)title;
-- (id)initWithTitle:(NSString *)title files:(NSArray *)files;
+- (id)initWithSingleUrl:(NSString *)url folder:(NSString *)destinationFolder;
+- (id)initWithSingleUrl:(NSString *)url title:(NSString *)title folder:(NSString *)destinationFolder;
+- (id)initWithTitle:(NSString *)title files:(NSArray *)files folder:(NSString *)destinationFolder;
 
 @end

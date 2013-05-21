@@ -11,27 +11,19 @@
 #import "DownloadProgress.h"
 #import "ASIHTTPRequest.h"
 
-@protocol FilesDownloaderDelegate <NSObject>
+#define FILES_DOWNLOADER_DID_DOWNLOAD_NOTIFICATION @"FILES_DOWNLOADER_DID_DOWNLOAD_NOTIFICATION"
+#define FILES_DOWNLOADER_DID_FAIL_NOTIFICATION @"FILES_DOWNLOADER_DID_FAIL_NOTIFICATION"
+#define FILES_DOWNLOADER_DID_CHANGE_PROGRESS_NOTIFICATION @"FILES_DOWNLOADER_DID_CHANGE_PROGRESS_NOTIFICATION"
 
-@optional
-
-- (void)filesDownloaderDidFailForPortion:(DownloadPortion *)portion;
-- (void)filesDownloaderDidDownloadPortion:(DownloadPortion *)portion;
-- (void)filesDownloaderDidChangeProgress:(DownloadProgress *)progress
-                              forPortion:(DownloadPortion *)portion;
-
-@end
+#define FILES_DOWNLOADER_PORTION_KEY @"FILES_DOWNLOADER_PORTION_KEY"
+#define FILES_DOWNLOADER_PROGRESS_KEY @"FILES_DOWNLOADER_PROGRESS_KEY"
 
 @interface FilesDownloader : NSObject
 
 + (id)shared;
 
-- (void)addObserver:(id<FilesDownloaderDelegate>)observer;
-- (void)removeObserver:(__unsafe_unretained id)observer; // unsafe, чтобы не циклился dealloc в iOS4
 - (void)enqueuePortion:(DownloadPortion *)portion;
-
-- (void)downloadFileSynchronous:(NSString *)url;
-
+- (void)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder;
 - (BOOL)isDownloadingPortion:(NSString *)portion;
 
 // нужно вызывать в applicationDidEnterForeground
@@ -40,10 +32,6 @@
 - (void)cancelAllPortions;
 - (void)cancelPortion:(NSString *)portion;
 
-// для наследников
-- (NSString *)pathForUrl:(NSString *)url inPortion:(NSString *)portionTitle;
-- (BOOL)createFolder:(NSString *)folder;
-- (NSString *)storeDataFolder;
 
 @property(nonatomic) BOOL allowCompressedResponse;
 
