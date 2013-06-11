@@ -19,13 +19,24 @@
 #define FILES_DOWNLOADER_PROGRESS_KEY @"FILES_DOWNLOADER_PROGRESS_KEY"
 #define FILES_DOWNLOADER_CANCELLED_KEY @"FILES_DOWNLOADER_CANCELLED_KEY"
 
+@protocol FilesDownloaderDelegate <NSObject>
+
+- (void)filesDownloaderDidDownload:(NSNotification *)notification;
+- (void)filesDownloaderDidFail:(NSNotification *)notification;
+- (void)filesDownloaderDidChangeProgress:(NSNotification *)notification;
+
+@end
+
 @interface FilesDownloader : NSObject
 
-+ (id)shared;
++ (FilesDownloader *)shared;
 
 - (void)enqueuePortion:(DownloadPortion *)portion;
 - (void)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder;
 - (BOOL)isDownloadingPortion:(NSString *)portion;
+
+- (void)subscribeForNotifications:(id<FilesDownloaderDelegate>)object;
+- (void)unsubscribeFromNotifications:(id<FilesDownloaderDelegate>)object;
 
 // нужно вызывать в applicationDidEnterForeground
 - (void)resume;

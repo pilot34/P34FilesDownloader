@@ -166,6 +166,34 @@ static FilesDownloader *__shared;
     }
 }
 
+- (void)subscribeForNotifications:(id<FilesDownloaderDelegate>)object
+{
+    [NSNotificationCenter.defaultCenter addObserver:object
+                                           selector:@selector(filesDownloaderDidDownload:)
+                                               name:FILES_DOWNLOADER_DID_DOWNLOAD_NOTIFICATION
+                                             object:nil];
+    
+    [NSNotificationCenter.defaultCenter addObserver:object
+                                           selector:@selector(filesDownloaderDidFail:)
+                                               name:FILES_DOWNLOADER_DID_FAIL_NOTIFICATION
+                                             object:nil];
+    
+    [NSNotificationCenter.defaultCenter addObserver:object
+                                           selector:@selector(filesDownloaderDidChangeProgress:)
+                                               name:FILES_DOWNLOADER_DID_CHANGE_PROGRESS_NOTIFICATION
+                                             object:nil];
+}
+
+- (void)unsubscribeFromNotifications:(id<FilesDownloaderDelegate>)object
+{
+    [NSNotificationCenter.defaultCenter removeObserver:object name:FILES_DOWNLOADER_DID_DOWNLOAD_NOTIFICATION
+                                                object:nil];
+    [NSNotificationCenter.defaultCenter removeObserver:object name:FILES_DOWNLOADER_DID_FAIL_NOTIFICATION
+                                                object:nil];
+    [NSNotificationCenter.defaultCenter removeObserver:object name:FILES_DOWNLOADER_DID_CHANGE_PROGRESS_NOTIFICATION
+                                                object:nil];
+}
+
 - (void)notifyObserversWithProgress:(DownloadProgress *)progress
 {
     [NSNotificationCenter.defaultCenter postNotificationName:FILES_DOWNLOADER_DID_CHANGE_PROGRESS_NOTIFICATION
