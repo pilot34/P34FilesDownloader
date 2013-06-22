@@ -196,23 +196,38 @@ static FilesDownloader *__shared;
 
 - (void)notifyObserversWithProgress:(DownloadProgress *)progress
 {
+    NSMutableDictionary *ui = [NSMutableDictionary dictionary];
+    if (progress)
+        ui[FILES_DOWNLOADER_PROGRESS_KEY] = progress;
+    if (self.currentPortion)
+        ui[FILES_DOWNLOADER_PORTION_KEY] = self.currentPortion;
+    
     [NSNotificationCenter.defaultCenter postNotificationName:FILES_DOWNLOADER_DID_CHANGE_PROGRESS_NOTIFICATION
                                                       object:nil
-                                                    userInfo:@{ FILES_DOWNLOADER_PORTION_KEY : self.currentPortion, FILES_DOWNLOADER_PROGRESS_KEY : progress}];
+                                                    userInfo:ui];
 }
 
 - (void)notifyObserversWithFinish
 {
+    NSMutableDictionary *ui = [NSMutableDictionary dictionary];
+    if (self.currentPortion)
+        ui[FILES_DOWNLOADER_PORTION_KEY] = self.currentPortion;
+    
     [NSNotificationCenter.defaultCenter postNotificationName:FILES_DOWNLOADER_DID_DOWNLOAD_NOTIFICATION
                                                       object:nil
-                                                    userInfo:@{ FILES_DOWNLOADER_PORTION_KEY : self.currentPortion }];
+                                                    userInfo:ui];
 }
 
 - (void)notifyObserversWithError
 {
+    NSMutableDictionary *ui = [NSMutableDictionary dictionary];
+    if (self.currentPortion)
+        ui[FILES_DOWNLOADER_PORTION_KEY] = self.currentPortion;
+    ui[FILES_DOWNLOADER_CANCELLED_KEY] = @(self.wasCancelled);
+    
     [NSNotificationCenter.defaultCenter postNotificationName:FILES_DOWNLOADER_DID_FAIL_NOTIFICATION
                                                       object:nil
-                                                    userInfo:@{ FILES_DOWNLOADER_PORTION_KEY : self.currentPortion, FILES_DOWNLOADER_CANCELLED_KEY : @(self.wasCancelled) }];
+                                                    userInfo:ui];
 }
 
 - (void)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder
