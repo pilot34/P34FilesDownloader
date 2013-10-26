@@ -27,12 +27,19 @@
 
 @end
 
+@interface NSNotification (FilesDownloader)
+
+@property (strong, nonatomic, readonly) DownloadPortion *portion;
+@property (strong, nonatomic, readonly) DownloadProgress *progress;
+
+@end
+
 @interface FilesDownloader : NSObject
 
 + (FilesDownloader *)shared;
 
 - (void)enqueuePortion:(DownloadPortion *)portion;
-- (void)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder;
+- (NSString *)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder;
 - (BOOL)isDownloadingPortion:(NSString *)portion;
 
 - (void)subscribeForNotifications:(id<FilesDownloaderDelegate>)object;

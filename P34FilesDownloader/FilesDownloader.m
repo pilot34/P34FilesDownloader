@@ -16,6 +16,20 @@
 
 static FilesDownloader *__shared;
 
+@implementation NSNotification (FilesDownloader)
+
+- (DownloadPortion *)portion
+{
+    return self.userInfo[FILES_DOWNLOADER_PORTION_KEY];
+}
+
+- (DownloadProgress *)progress
+{
+    return self.userInfo[FILES_DOWNLOADER_PROGRESS_KEY];
+}
+
+@end
+
 @interface FilesDownloader()
 
 @property(strong, atomic) NSArray *portionsQueue;
@@ -230,11 +244,12 @@ static FilesDownloader *__shared;
                                                     userInfo:ui];
 }
 
-- (void)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder
+- (NSString *)downloadFileSynchronous:(NSString *)url folder:(NSString *)folder
 {
     ASIHTTPRequest *r = [ASIHTTPRequest requestWithURL:[NSURL URLWithString:url]];
     r.downloadDestinationPath = [folder stringByAppendingPathComponent:[url lastPathComponent]];
     [r startSynchronous];
+    return r.downloadDestinationPath;
 }
 
 - (NSInteger)bytesPerSecond
