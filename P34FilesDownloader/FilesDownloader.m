@@ -95,6 +95,7 @@ static FilesDownloader *__shared;
     
     for (NSString *url in portion.files)
     {
+        [self createFolder:portion.destinationFolder];
         NSString *path = [portion.destinationFolder stringByAppendingPathComponent:[url lastPathComponent]];
         NSString *partPath = [path stringByAppendingPathExtension:@"part"];
 
